@@ -3,11 +3,13 @@ from bs4 import BeautifulSoup, SoupStrainer
 import lxml, threading
 import sqlite3
 import re
+from SearchModule import *
 
 requests_session = requests.Session()
 
 RCDB = 'https://rcdb.com'
 lastparkid = 0
+skips = 0
 
 
 def createDatabaseandTables():
@@ -182,6 +184,7 @@ def darkrideparklistings(pagenum, kinds=("park",)):
             darkrideparkpage(loc)
 
 def darkridepage(page):
+    global skips
     try:
         x = requests_session.get(page)
         soup = BeautifulSoup(x.text, 'lxml')
@@ -210,16 +213,23 @@ def darkridepage(page):
         row = conn.execute("SELECT ParkID FROM Park WHERE DRDBURL = ?", (parkurl,)).fetchone()
         conn.close()
         if row is None:
-            print("Park not found for", page)
-            return
+            if skips < 1:
+                darkrideparkpage(parkurl)
+                return darkridepage(page)
+            else:
+                skips = 0
+                return Exception(AttributeError)
         addDarkRide(page, name, type, opened, closed, status, row[0])
 
     except IndexError:
         print("No page")
+    except AttributeError:
+        print("No page at "+page)
 
 
 
 def darkrideparkpage(url):
+    global skips
     x = requests_session.get(url, timeout=10)
     soup = BeautifulSoup(x.text, 'lxml')
 
@@ -250,6 +260,7 @@ def darkrideparkpage(url):
             AddDRDB(name, " ".join(address), status, url, opened, closed, operator)
     except:
         print("Skipping", url)
+        skips+=1
 
 
 def coasterspage(page):
@@ -330,6 +341,10 @@ def parkspage(page):
     except IndexError:
         print("No page")
 
+def searchcoasters(searchfor):
+    conn = sqlite3.connect('ParkDatabase.db')
+
+
 
 def main():
     global lastparkid
@@ -337,9 +352,19 @@ def main():
     conn = sqlite3.connect("ParkDatabase.db")
     lastparkid = conn.execute("SELECT MAX(ParkID) FROM Park").fetchone()[0] or 0
     conn.close()
-    for i in range(12, 23):
-        darkrideparklistings(i)
-        print(str(i) + "/23 completed")
+    rebuild_search_index()
+    conn = sqlite3.connect("ParkDatabase.db")
+    for r in search_parks("Alton"):
+        print(r["ParkName"], "-", r["ParkLocation"], "-", r["ParkID"])
+        print("Coasters:")
+        Cursor = conn.execute("SELECT * FROM Coaster WHERE CoasterParkID = ?", (r["ParkID"],))
+        for i in Cursor:
+            print(i[1])
+        print("Darkrides:")
+        Cursor = conn.execute("SELECT * FROM DarkRide WHERE DarkRideParkID = ?", (r["ParkID"],))
+        for i in Cursor:
+            print(i[1])
+
 
 
 
