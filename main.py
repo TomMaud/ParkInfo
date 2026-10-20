@@ -4,6 +4,7 @@ import lxml, threading
 import sqlite3
 import re
 from SearchModule import *
+from Tracker import *
 
 requests_session = requests.Session()
 
@@ -21,8 +22,8 @@ def createDatabaseandTables():
             ParkName     TEXT NOT NULL,
             ParkLocation TEXT NOT NULL,
             ParkStatus   TEXT NOT NULL,
-            RCDBURL      TEXT UNIQUE,
-            DRDBURL      TEXT UNIQUE,
+            RCDBURL      TEXT,
+            DRDBURL      TEXT,
             Operator     TEXT,
             ParkOpened   TEXT,
             ParkClosed   TEXT
@@ -344,29 +345,63 @@ def parkspage(page):
 def searchcoasters(searchfor):
     conn = sqlite3.connect('ParkDatabase.db')
 
-
-
 def main():
     global lastparkid
     createDatabaseandTables()
+    createAccountTables()
     conn = sqlite3.connect("ParkDatabase.db")
     lastparkid = conn.execute("SELECT MAX(ParkID) FROM Park").fetchone()[0] or 0
     conn.close()
     rebuild_search_index()
+
+    try:
+        id = createAccounts("TomMaud", "Password")
+    except:
+        id = 1
+    if id == None:
+        id = 1
+    conn = sqlite3.connect("ParkDatabase.db")
+    conn = sqlite3.connect('ParkDatabase.db')
+    CoasterCursor = conn.execute("SELECT * FROM CoasterRidden WHERE AccountID = ? AND Placement IS NOT NULL",
+                                 (id,)).fetchall()
+    DarkRideCursor = conn.execute("SELECT * FROM DarkRideRidden WHERE AccountID = ? AND Placement IS NOT NULL",
+                                  (id,)).fetchall()
+    conn.close()
+    for i in CoasterCursor:
+        removeriddencoaster(id, i[1])
+    for i in DarkRideCursor:
+        removeriddenDarkride(id, i[1])
+
     conn = sqlite3.connect("ParkDatabase.db")
     for r in search_parks("Alton"):
-        print(r["ParkName"], "-", r["ParkLocation"], "-", r["ParkID"])
-        print("Coasters:")
-        Cursor = conn.execute("SELECT * FROM Coaster WHERE CoasterParkID = ?", (r["ParkID"],))
-        for i in Cursor:
-            print(i[1])
-        print("Darkrides:")
-        Cursor = conn.execute("SELECT * FROM DarkRide WHERE DarkRideParkID = ?", (r["ParkID"],))
-        for i in Cursor:
-            print(i[1])
+        CoasterCursor = conn.execute("SELECT * FROM Coaster WHERE CoasterParkID = ?", (r["ParkID"],)).fetchall()
+        DarkCursor = conn.execute("SELECT * FROM DarkRide WHERE DarkRideParkID = ?", (r["ParkID"],)).fetchall()
+    conn.close()
+    ranking = 1
+    for i in CoasterCursor:
+        markriddencoaster(id, i[0],ranking)
+        ranking += 2
+    ranking = 2
+    for i in DarkCursor:
+        markriddenDarkride(id, i[0],ranking)
+        ranking += 2
+    rankings = getUsersRankings(id)
+    for i in rankings:
+        print(i)
 
+    print("\n \n \n \n")
 
+    markriddencoaster(id, '/959.htm',3)
+    markriddenDarkride(id, '/6992.htm',1)
 
+    rankings = getUsersRankings(id)
+    for i in rankings:
+        print(i)
+    print("\n \n \n \n")
+    removeriddenDarkride(id, "https://darkridedatabase.com/rides/around-the-world-in-80-days/")
+    rankings = getUsersRankings(id)
+    for i in rankings:
+        print(i)
 
 if __name__ == "__main__":
     main()
